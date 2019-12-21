@@ -2,7 +2,7 @@
 
 
 
-![intro](imgs/teaser_.png)
+![intro](imgs/teaser.png)
 
 ## Requirements
 
