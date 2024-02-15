@@ -20,3 +20,4 @@ bin-release/
 .idea/*
 __pycache__
 .gitignore
+points
