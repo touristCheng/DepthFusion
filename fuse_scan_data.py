@@ -16,14 +16,14 @@ import json
 from warp_func import *
 
 parser = argparse.ArgumentParser(description='Depth fusion with consistency check.')
-parser.add_argument('--root_path', type=str, default='/Users/shuocheng/Projects/scan_data/'
+parser.add_argument('--root_path', type=str, default='/mnt/data2/shuo/rss24_rebuttal/'
                                                      'new_calib_data_13-02-2024-21-30-38')
 parser.add_argument('--save_path', type=str, default='./points')
 
-parser.add_argument('--dist_thresh', type=float, default=0.0005)
+parser.add_argument('--dist_thresh', type=float, default=0.001)
 
 parser.add_argument('--num_consist', type=int, default=15)
-parser.add_argument('--device', type=str, default='cpu')
+parser.add_argument('--device', type=str, default='cuda')
 
 args = parser.parse_args()
 
@@ -177,6 +177,7 @@ def load_data2(root_path, calib_tag):
     rgbs = []
     depths = []
     projs = []
+    masks = []
 
     intr_mat = np.array([[606.12524414, 0., 318.55557251],
                   [0., 605.62731934, 250.66503906],
@@ -191,7 +192,7 @@ def load_data2(root_path, calib_tag):
         dep = np.load(f"{root_path}/obj_deps/{i:06d}.npy", allow_pickle=True)
         dep = np.array(dep) / 1000.
         msk = np.array(Image.open(f"{root_path}/obj_msks/{i:06d}.png"))
-        dep *= msk
+        masks.append(msk)
 
         depths.append(torch.from_numpy(dep).unsqueeze(0))
 
@@ -205,7 +206,7 @@ def load_data2(root_path, calib_tag):
 
     depths = torch.stack(depths).float()
     projs = torch.stack(projs).float()
-    return depths, projs, rgbs
+    return depths, projs, rgbs, masks
 
 
 def extract_points(pc, mask, rgb):
@@ -228,7 +229,7 @@ def main(tag_name):
     mkdir_p(args.save_path)
     scene = "scan_obj"
 
-    depths, projs, rgbs = load_data2(args.root_path, calib_tag=tag_name)
+    depths, projs, rgbs, obj_masks = load_data2(args.root_path, calib_tag=tag_name)
     tot_frame = depths.shape[0]
     height, width = depths.shape[2], depths.shape[3]
     points = []
@@ -255,6 +256,8 @@ def main(tag_name):
                 break
 
         final_mask = (val_cnt >= args.num_consist).squeeze(0)
+        obj_mask = torch.from_numpy(obj_masks[i])
+        final_mask[obj_mask<=0] = 0
         avg_points = torch.div(pc_buff, val_cnt).permute(1, 2, 0)
 
         final_pc = extract_points(avg_points, final_mask, rgbs[i])
@@ -269,7 +272,7 @@ def main(tag_name):
     inds = list(range(len(full_points)))
     np.random.shuffle(inds)
     full_points = full_points[inds]
-    full_points = full_points[:4096*2]
+    full_points = full_points[:min(len(inds), 4096*2)]
     write_ply('{}/{}_{}.ply'.format(args.save_path, scene, tag_name), full_points)
     del points
 

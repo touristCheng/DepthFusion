@@ -21,3 +21,4 @@ bin-release/
 __pycache__
 .gitignore
 points
+tsdf-fusion
